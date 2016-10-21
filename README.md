@@ -7,6 +7,6 @@ Developed by Fluidy, Aalto University 2016.
 
 # Dependencies
 - [numpy](http://www.numpy.org/)
-- SimpleITK (http://www.simpleitk.org/)
+- [SimpleITK](http://www.simpleitk.org/)
 
 
