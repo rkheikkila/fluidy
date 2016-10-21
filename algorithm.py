@@ -7,6 +7,7 @@ produce a clear image of the plane below the water surface.
 
 import numpy as np
 import SimpleITK as sitk
+import cv2
 
 
 def load_frames(filename):
@@ -15,7 +16,8 @@ def load_frames(filename):
     Returns:
         a list of 3D numpy arrays containing the video frames.
     """
-    pass
+    vidcap = cv2.VideoCapture(filename)
+    return [vidcap.read()[1] for i in range(int(vidcap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT)))]	
 
 
 def save_image(array, filename):
@@ -28,7 +30,7 @@ def save_image(array, filename):
     Returns:
         nothing, saves image to disk
     """
-    pass
+    cv2.imwrite(filename,array)
 
 
 def register_images(frames):
@@ -72,3 +74,8 @@ def register_images(frames):
     return registration.Execute(image, image)
 
 
+#   Testing	
+if __name__ == "__main__":
+	frames = load_frames('Shortest Video on Youtube.mp4')
+	register_images(frames)
+	[save_image(frames[i],'images/' + str(i) + '.jpeg') for i in range(len(frames))]
