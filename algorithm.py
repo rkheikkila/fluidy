@@ -43,61 +43,80 @@ def register_images(fixed_image, moving_image):
     Returns:
         the applied non-rigid transformation
     """
+    max_iter = 100
+    grid_physical_spacing = [10.0, 10.0]
     registration = sitk.ImageRegistrationMethod()
 
     # Initialize B-spline transformation and control point grid
-    grid_physical_spacing = [50.0, 50.0, 50.0]
-    image_physical_size = [size*spacing for size,spacing in zip(fixed_image.GetSize(), fixed_image.GetSpacing())]
-    mesh_size = [int(img_size/grid_spacing + 0.5)
-                 for img_size,grid_spacing in zip(image_physical_size, grid_physical_spacing)]
-    initial_transform = sitk.BSplineTransformInitializer(image1 = fixed_image,
-                                                         transformDomainMeshSize = mesh_size, order=3)
+    image_physical_size = [size * spacing for size, spacing in zip(fixed_image.GetSize(), fixed_image.GetSpacing())]
+    mesh_size = [int(img_size / grid_spacing + 0.5)
+                 for img_size, grid_spacing in zip(image_physical_size, grid_physical_spacing)]
+    initial_transform = sitk.BSplineTransformInitializer(image1=fixed_image,
+                                                         transformDomainMeshSize=mesh_size, order=3)
     registration.SetInitialTransform(initial_transform)
 
-    # Use sum of squares as optimization metric
     registration.SetMetricAsMeanSquares()
     registration.SetMetricSamplingStrategy(registration.RANDOM)
     registration.SetMetricSamplingPercentage(0.01)
 
     # Multi-resolution framework.
-    registration.SetShrinkFactorsPerLevel(shrinkFactors=[4, 2, 1])
-    registration.SetSmoothingSigmasPerLevel(smoothingSigmas=[2, 1, 0])
-    registration.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
+    # registration.SetShrinkFactorsPerLevel(shrinkFactors=[4, 2, 1])
+    # registration.SetSmoothingSigmasPerLevel(smoothingSigmas=[8, 4, 0])
+    # registration.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
 
     registration.SetInterpolator(sitk.sitkLinear)
 
     # Optimize using gradient descent method
-    registration.SetOptimizerAsGradientDescent(learningRate=1.0, numberOfIterations=100)
+    registration.SetOptimizerAsLBFGSB(gradientConvergenceTolerance=1e-5, numberOfIterations=max_iter)
 
     return registration.Execute(fixed_image, moving_image)
 
 
-def iterative_registration(frames, max_iter=10):
+def iterative_registration(image_arrays, max_iter=5):
     """Performs iterative registration for a set of frames.
 
     Args:
-        frames: a list of 3D numpy arrays containing the video frames
+        image_arrays: a list of 3D numpy arrays containing the video frames
+        max_iter: Iteration limit
     Returns:
-        a 3D numpy array containing the image
+        a list of numpy arrays containing the mean of each iteration
     """
-    sitk_frames = [sitk.GetImageFromArray(frame, isVector=True) for frame in frames]
-    image = sitk.JoinSeries(sitk_frames)
+    # TODO: Develop a workaround for RGB images
+    greyscale_images = (image.mean(axis=2) for image in image_arrays)
+    frames = [sitk.GetImageFromArray(frame) for frame in greyscale_images]
+    # Calculate mean by exploiting the overloaded addition operator
+    # Can this summation overflow? (pixel values are 64-bit float)
+    temporal_mean = sum(frames) / len(frames)
+
+    resampler = sitk.ResampleImageFilter()
+    resampler.SetDefaultPixelValue(temporal_mean.GetPixelIDValue())
+    resampler.SetInterpolator(sitk.sitkLinear)
+
+    means = [temporal_mean]
 
     # TODO: Implement a convergence criterion based on sum-of-squares metric
     for i in range(max_iter):
-        # Calculate temporal mean of frame set
-        temporal_mean = sitk.MeanProjection(image, projectionDimension=3)
-        # Apply non-rigid registration
-        transformation = register_images(temporal_mean, image)
-        # Recover transformed set of frames
-        image = sitk.Resample(image, temporal_mean, transformation, sitk.sitkLinear, 0.0, image.GetPixelIDValue())
+        resampler.SetReferenceImage(temporal_mean)
 
-    final_image = sitk.MedianProjection(image, projectionDimension=3)
-    return sitk.GetArrayFromImage(final_image)
+        transformed_frames = []
+        for frame in frames:
+            # TODO: Blur frames to improve registration quality
+            # Apply non-rigid registration
+            transformation = register_images(temporal_mean, frame)
+            # Dewarp images using the optimized transformation
+            resampler.SetTransform(transformation)
+            transformed_frame = resampler.Execute(frame)
+            transformed_frames.append(transformed_frame)
+
+        temporal_mean = sum(transformed_frames) / len(transformed_frames)
+        means.append(temporal_mean)
+        frames = transformed_frames
+
+    return [sitk.GetArrayFromImage(mean) for mean in means]
 
 
 #   Testing	
 if __name__ == "__main__":
-	frames = load_frames('Shortest Video on Youtube.mp4')
-	register_images(frames)
-	[save_image(frames[i],'images/' + str(i) + '.jpeg') for i in range(len(frames))]
+    frames = load_frames('expdata_middle.avi')
+    imgs = iterative_registration(frames)
+    for i in range(len(imgs)): save_image(imgs[i], "result{}.jpg".format(i))
