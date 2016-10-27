@@ -95,7 +95,6 @@ def iterative_registration(image_arrays, max_iter=5):
     greyscale_images = (image.mean(axis=2) for image in image_arrays)
     frames = [sitk.GetImageFromArray(frame) for frame in greyscale_images]
     # Calculate mean by exploiting the overloaded addition operator
-    # Can this summation overflow? (pixel values are 64-bit float)
     temporal_mean = sum(frames) / len(frames)
 
     resampler = sitk.ResampleImageFilter()
@@ -107,13 +106,23 @@ def iterative_registration(image_arrays, max_iter=5):
     # TODO: Implement a convergence criterion based on sum-of-squares metric
     for i in range(max_iter):
         resampler.SetReferenceImage(temporal_mean)
-
         transformed_frames = []
-        for frame in frames:
+
+        # Compute transformation for the first frame and use it as an initial guess with next
+        first_transformation = register_images(temporal_mean, frames[0])
+        # Apply non-rigid registration
+        params = first_transformation.GetParameters()
+        resampler.SetTransform(first_transformation)
+        # Dewarp images using the optimized transformation
+        transformed_frame = resampler.Execute(frames[0])
+        transformed_frames.append(transformed_frame)
+
+        # Compute the rest
+        for frame in frames[1:]:
             # TODO: Blur frames to improve registration quality
-            # Apply non-rigid registration
-            transformation = register_images(temporal_mean, frame)
-            # Dewarp images using the optimized transformation
+            transformation = register_images(temporal_mean, frame,
+                                             initial_params=params, multires=False)
+            params = transformation.GetParameters()
             resampler.SetTransform(transformation)
             transformed_frame = resampler.Execute(frame)
             transformed_frames.append(transformed_frame)
