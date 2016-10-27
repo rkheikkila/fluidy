@@ -33,15 +33,20 @@ def save_image(array, filename):
     cv2.imwrite(filename,array)
 
 
-def register_images(fixed_image, moving_image):
+def register_images(fixed_image, moving_image, initial_params=None, sample_ratio=1.0, lbfgs=True, multires=True):
     """Performs non-rigid image registration on a collection of images.
 
     Args:
         fixed_image: the image that is considered fixed in the registration process
         moving_image: image to be transformed
+        initial_params: preoptimized parameters used as an initial guess
+        sample_ratio: ratio of pixels sampled in calculation of sum of squares difference.
+        lbfgs: flag to enable the LBFGS optimization algorithm. If false,
+                gradient descent method is used instead.
+        multires: flag to enable multi-resolution framework, which results in a more robust optimization process.
 
     Returns:
-        the applied non-rigid transformation
+        the optimized non-rigid transformation
     """
     max_iter = 100
     grid_physical_spacing = [10.0, 10.0]
@@ -50,25 +55,30 @@ def register_images(fixed_image, moving_image):
     # Initialize B-spline transformation and control point grid
     image_physical_size = [size * spacing for size, spacing in zip(fixed_image.GetSize(), fixed_image.GetSpacing())]
     mesh_size = [int(img_size / grid_spacing + 0.5)
-                 for img_size, grid_spacing in zip(image_physical_size, grid_physical_spacing)]
+                    for img_size, grid_spacing in zip(image_physical_size, grid_physical_spacing)]
     initial_transform = sitk.BSplineTransformInitializer(image1=fixed_image,
                                                          transformDomainMeshSize=mesh_size, order=3)
+    if initial_params:
+        initial_transform.SetParameters(initial_params)
+
     registration.SetInitialTransform(initial_transform)
 
     registration.SetMetricAsMeanSquares()
-    registration.SetMetricSamplingStrategy(registration.RANDOM)
-    registration.SetMetricSamplingPercentage(0.01)
+    if 0 < sample_ratio < 1.0:
+        registration.SetMetricSamplingStrategy(registration.RANDOM)
+        registration.SetMetricSamplingPercentage(sample_ratio)
 
-    # Multi-resolution framework.
-    # registration.SetShrinkFactorsPerLevel(shrinkFactors=[4, 2, 1])
-    # registration.SetSmoothingSigmasPerLevel(smoothingSigmas=[8, 4, 0])
-    # registration.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
+    if multires:
+        registration.SetShrinkFactorsPerLevel(shrinkFactors=[4, 2, 1])
+        registration.SetSmoothingSigmasPerLevel(smoothingSigmas=[8, 4, 0])
+        registration.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
+
+    if lbfgs:
+        registration.SetOptimizerAsLBFGSB(gradientConvergenceTolerance=1e-5, numberOfIterations=max_iter)
+    else:
+        registration.SetOptimizerAsGradientDescent(learningRate=1.0, numberOfIterations=max_iter)
 
     registration.SetInterpolator(sitk.sitkLinear)
-
-    # Optimize using gradient descent method
-    registration.SetOptimizerAsLBFGSB(gradientConvergenceTolerance=1e-5, numberOfIterations=max_iter)
-
     return registration.Execute(fixed_image, moving_image)
 
 
