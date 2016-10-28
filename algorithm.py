@@ -33,6 +33,29 @@ def save_image(array, filename):
     cv2.imwrite(filename,array)
 
 
+def sum_of_squares(image1, image2, return_array = False):
+    """Calculates the sum of squared differences of two images
+
+    Args:
+        image1: fixed image
+        image2: moving image
+        return_array: if true, returns the squared difference for each pixel as an array
+    Returns:
+        the sum of squared differences or a numpy array
+    """
+    # Rescale the image intensities to [0,255]
+    scaledImage1 = sitk.RescaleIntensity(image1)
+    scaledImage2 = sitk.RescaleIntensity(image2)
+
+    # Apply square difference filter
+    filter = sitk.SquaredDifferenceImageFilter()
+    filteredImage = sitk.GetArrayFromImage(filter.Execute(scaledImage1,scaledImage2))
+    if return_array:
+        return filteredImage
+    else:
+        return sum(filteredImage.flatten())
+
+
 def register_images(fixed_image, moving_image, initial_params=None, sample_ratio=1.0, lbfgs=True, multires=True):
     """Performs non-rigid image registration on a collection of images.
 
