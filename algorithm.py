@@ -56,6 +56,106 @@ def sum_of_squares(image1, image2, return_array = False):
         return sum(filteredImage.flatten())
 
 
+def warp_flow(img, flow):
+    """Applies a generic transformation to an image
+    
+    Args: 
+        img: image to transform
+        flow: transformation array  
+    Returns:
+        the transformed image
+    """    
+    h, w = flow.shape[:2]
+    flow = -flow
+    flow[:,:,0] += np.arange(w)
+    flow[:,:,1] += np.arange(h)[:,np.newaxis]
+    res = cv2.remap(img, flow.astype('float32'), None, cv2.INTER_LINEAR)
+    return res
+
+
+def optical_flow(prev, next):
+    """Calculates the dense optical flow from one image to another
+    
+    Args: 
+        prev: initial image
+        next: shifted image 
+    Returns:
+        the movement of each pixel between the images
+    """
+    # TODO: Use previous flow array as an initial guess
+    flow = cv2.calcOpticalFlowFarneback(prev, next, pyr_scale = 0.5, levels = 3, winsize = 15, iterations = 3, poly_n = 5, poly_sigma = 1.2, flags = cv2.OPTFLOW_USE_INITIAL_FLOW, ) #  , cv2.cv.OPTFLOW_USE_INITIAL_FLOW
+    return flow
+
+
+def hta_algorithm(image_arrays, max_iter=5):
+    """Performs iterative registration for a set of frames.
+
+    Args:
+        image_arrays: a list of 3D numpy arrays containing the video frames
+        max_iter: Iteration limit
+    Returns:
+        a list of numpy arrays containing the mean of each iteration
+    """
+    # This method doesn't work yet
+    frames = [image.mean(axis=2) for image in image_arrays]
+    temporal_mean = sum(frames) / len(frames)
+    h, w = temporal_mean.shape[:2]
+
+    means = []
+    means.append(temporal_mean)
+
+    for i in range(max_iter):
+        shift_maps = []
+        shift_maps.append(np.zeros((h,w,2)))
+        for i in range(len(frames)-1):
+            shift_maps.append(optical_flow(frames[0],frames[i+1]))
+
+        centroid_shift_map = sum(shift_maps) / len(shift_maps)
+
+        corrected_shift_maps = []
+        for n in range(len(shift_maps)):
+            map = centroid_shift_map
+            for i in range(w):
+                for j in range(h):
+                    indx = max(min(i + int(round(w*map[j,i,0])),w-1),0)
+                    indy = max(min(i + int(round(h*map[j,i,1])),h-1),0)
+                    map[j,i,:] = map[j,i,:] + shift_maps[n][indy,indx,:]
+            corrected_shift_maps.append(map)
+
+        dewarped_frames = [warp_flow(frames[i],shift_maps[i]) for i in range(len(frames))]
+        temporal_mean = sum(dewarped_frames) / len(dewarped_frames)
+        means.append(temporal_mean)
+        frames = dewarped_frames
+
+    return means
+
+
+def oreifej_algorithm(image_arrays, max_iter=5):
+    """Performs iterative registration for a set of frames.
+
+    Args:
+        image_arrays: a list of 3D numpy arrays containing the video frames
+        max_iter: Iteration limit
+    Returns:
+        a list of numpy arrays containing the mean of each iteration
+    """
+    # TODO: Blur the frames for a better result, add convergence criterion
+    frames = [image.mean(axis=2) for image in image_arrays]
+    temporal_mean = sum(frames) / len(frames)
+
+    means = []
+    means.append(temporal_mean)
+
+    for i in range(max_iter):
+        shift_maps = [optical_flow(frames[i],temporal_mean) for i in range(len(frames))]
+        dewarped_frames = [warp_flow(frames[i],shift_maps[i]) for i in range(len(frames))]
+        temporal_mean = sum(dewarped_frames) / len(dewarped_frames)
+        means.append(temporal_mean)
+        frames = dewarped_frames
+
+    return means
+
+
 def register_images(fixed_image, moving_image, initial_params=None, sample_ratio=1.0, lbfgs=True, multires=True):
     """Performs non-rigid image registration on a collection of images.
 
@@ -160,5 +260,6 @@ def iterative_registration(image_arrays, max_iter=5):
 #   Testing	
 if __name__ == "__main__":
     frames = load_frames('expdata_middle.avi')
-    imgs = iterative_registration(frames)
+    #imgs = iterative_registration(frames[0:99])
+    imgs = oreifej_algorithm(frames[0:99])
     for i in range(len(imgs)): save_image(imgs[i], "result{}.jpg".format(i))
