@@ -124,19 +124,21 @@ def hta_algorithm(image_arrays, max_iter=5):
     return means
 
 
-def oreifej_algorithm(image_arrays, max_iter=10):
+def oreifej_algorithm(image_arrays, max_iter=10, low_rank=True):
     """Performs iterative registration for a set of frames.
 
     Args:
         image_arrays: a list of 3D numpy arrays containing the video frames
         max_iter: Iteration limit
+        low_rank: eliminate sparse noise by rank minimization
     Returns:
         a list of numpy arrays containing the mean of each iteration
     """
     # TODO: Blur the frames for a better result
     convergence_threshold = 0.01
     frames = [image.mean(axis=2) for image in image_arrays]
-    temporal_mean = sum(frames) / len(frames)
+    num_frames = len(frames)
+    temporal_mean = sum(frames) / num_frames
 
     means = []
     means.append(temporal_mean)
@@ -145,7 +147,7 @@ def oreifej_algorithm(image_arrays, max_iter=10):
         shift_maps = [optical_flow(frames[i], temporal_mean) for i in range(len(frames))]
         dewarped_frames = [warp_flow(frames[i], shift_maps[i]) for i in range(len(frames))]
 
-        new_mean = sum(dewarped_frames) / len(dewarped_frames)
+        new_mean = sum(dewarped_frames) / num_frames
         diffs = mean_of_differences(temporal_mean, new_mean)
         temporal_mean = new_mean
         means.append(temporal_mean)
@@ -153,6 +155,15 @@ def oreifej_algorithm(image_arrays, max_iter=10):
 
         if diffs[0] < convergence_threshold:
             break
+
+    if low_rank:
+        image_vectors = [img.flatten() for img in frames]
+        frame_matrix = np.array(image_vectors).T
+        h, w = temporal_mean.shape[:2]
+        weight = (h * w) ** -0.5
+        low_rank_matrix, noise = robust_pca(frame_matrix, alpha=weight)
+        low_rank_mean = low_rank_matrix.mean(axis=1).reshape(h, w)
+        means.append(low_rank_mean)
 
     return means
 
