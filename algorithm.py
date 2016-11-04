@@ -33,27 +33,20 @@ def save_image(array, filename):
     cv2.imwrite(filename,array)
 
 
-def sum_of_squares(image1, image2, return_array = False):
-    """Calculates the sum of squared differences of two images
+def mean_of_differences(image1, image2):
+    """Calculates the sum of absolute pixelwise differences of two images.
 
     Args:
-        image1: fixed image
-        image2: moving image
-        return_array: if true, returns the squared difference for each pixel as an array
+        image1, image2: two image arrays of same shape to compare
     Returns:
-        the sum of squared differences or a numpy array
+        a tuple containing mean differences for each channel
     """
-    # Rescale the image intensities to [0,255]
-    scaledImage1 = sitk.RescaleIntensity(image1)
-    scaledImage2 = sitk.RescaleIntensity(image2)
+    # Rescale the image intensities to [0,1]
+    scaledImage1 = cv2.normalize(image1, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+    scaledImage2 = cv2.normalize(image2, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
 
-    # Apply square difference filter
-    filter = sitk.SquaredDifferenceImageFilter()
-    filteredImage = sitk.GetArrayFromImage(filter.Execute(scaledImage1,scaledImage2))
-    if return_array:
-        return filteredImage
-    else:
-        return sum(filteredImage.flatten())
+    differences = cv2.absdiff(scaledImage1, scaledImage2)
+    return cv2.mean(differences)
 
 
 def warp_flow(img, flow):
