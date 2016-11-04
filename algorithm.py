@@ -5,6 +5,7 @@ This algorithm reduces distortions in a video caused by water surface and
 produce a clear image of the plane below the water surface.
 """
 
+from numpy.linalg import norm, svd
 import numpy as np
 import SimpleITK as sitk
 import cv2
@@ -154,6 +155,54 @@ def oreifej_algorithm(image_arrays, max_iter=10):
             break
 
     return means
+
+
+def robust_pca(X, alpha=0.01, tol=1e-4, max_iter=50, verbose=False):
+    """Sparse error elimination through robust principal component analysis.
+
+    Args:
+        X: the matrix to optimize
+        alpha: tuning parameter tuning parameter
+        tol: convergence tolerance
+        max_iter: iteration limit
+        verbose: print iteration count when finished
+
+    Returns:
+        tuple containing low-rank approximation matrix and sparse noise matrix
+
+    This method is based on inexact augmented lagrange multipliers.
+    Original code by Kyle Kastner, http://kastnerkyle.github.io/posts/robust-matrix-decomposition/
+    """
+    Y = X
+    norm_two = norm(Y.ravel(), 2)
+    norm_inf = norm(Y.ravel(), np.inf) / alpha
+    dual_norm = np.max([norm_two, norm_inf])
+    Y = Y / dual_norm
+    A = np.zeros(Y.shape)
+    E = np.zeros(Y.shape)
+    dnorm = norm(X, 'fro')
+    mu = 1.25 / norm_two
+    rho = 1.5
+    sv = 10.
+    n = Y.shape[0]
+    for iter in range(max_iter):
+        Eraw = X - A + (1 / mu) * Y
+        E = np.maximum(Eraw - alpha / mu, 0) + np.minimum(Eraw + alpha / mu, 0)
+        U, S, V = svd(X - E + (1 / mu) * Y, full_matrices=False)
+        svp = (S > 1 / mu).shape[0]
+        if svp < sv:
+            sv = np.min([svp + 1, n])
+        else:
+            sv = np.min([svp + round(.05 * n), n])
+        A = np.dot(np.dot(U[:, :svp], np.diag(S[:svp] - 1 / mu)), V[:svp, :])
+        Z = X - A - E
+        Y += mu * Z
+        mu = np.min([mu * rho, mu * 1e7])
+        if (norm(Z, 'fro') / dnorm) < tol:
+            break
+    if verbose:
+        print("Finished at iteration %d" % (iter+1))
+    return A, E
 
 
 def register_images(fixed_image, moving_image, initial_params=None, sample_ratio=1.0, lbfgs=True, multires=True):
