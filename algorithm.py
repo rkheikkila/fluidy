@@ -123,7 +123,7 @@ def hta_algorithm(image_arrays, max_iter=5):
     return means
 
 
-def oreifej_algorithm(image_arrays, max_iter=5):
+def oreifej_algorithm(image_arrays, max_iter=10):
     """Performs iterative registration for a set of frames.
 
     Args:
@@ -132,19 +132,26 @@ def oreifej_algorithm(image_arrays, max_iter=5):
     Returns:
         a list of numpy arrays containing the mean of each iteration
     """
-    # TODO: Blur the frames for a better result, add convergence criterion
+    # TODO: Blur the frames for a better result
+    convergence_threshold = 0.01
     frames = [image.mean(axis=2) for image in image_arrays]
     temporal_mean = sum(frames) / len(frames)
 
     means = []
     means.append(temporal_mean)
 
-    for i in range(max_iter):
-        shift_maps = [optical_flow(frames[i],temporal_mean) for i in range(len(frames))]
-        dewarped_frames = [warp_flow(frames[i],shift_maps[i]) for i in range(len(frames))]
-        temporal_mean = sum(dewarped_frames) / len(dewarped_frames)
+    for iter in range(max_iter):
+        shift_maps = [optical_flow(frames[i], temporal_mean) for i in range(len(frames))]
+        dewarped_frames = [warp_flow(frames[i], shift_maps[i]) for i in range(len(frames))]
+
+        new_mean = sum(dewarped_frames) / len(dewarped_frames)
+        diffs = mean_of_differences(temporal_mean, new_mean)
+        temporal_mean = new_mean
         means.append(temporal_mean)
         frames = dewarped_frames
+
+        if diffs[0] < convergence_threshold:
+            break
 
     return means
 
