@@ -137,33 +137,38 @@ def oreifej_algorithm(image_arrays, max_iter=10, low_rank=True):
     # TODO: Blur the frames for a better result
     convergence_threshold = 0.01
     frames = [image.mean(axis=2) for image in image_arrays]
+    color_frames = image_arrays
     num_frames = len(frames)
     temporal_mean = sum(frames) / num_frames
 
     means = []
-    means.append(temporal_mean)
+    means.append(np.mean(np.stack(color_frames,axis = 0),axis = 0))
 
     for iter in range(max_iter):
         shift_maps = [optical_flow(frames[i], temporal_mean) for i in range(len(frames))]
         dewarped_frames = [warp_flow(frames[i], shift_maps[i]) for i in range(len(frames))]
+        color_frames = [warp_flow(color_frames[i], shift_maps[i]) for i in range(len(color_frames))]
 
         new_mean = sum(dewarped_frames) / num_frames
         diffs = mean_of_differences(temporal_mean, new_mean)
         temporal_mean = new_mean
-        means.append(temporal_mean)
+        means.append(np.mean(np.stack(color_frames,axis = 0),axis = 0))
         frames = dewarped_frames
-
+        
         if diffs[0] < convergence_threshold:
             break
 
     if low_rank:
-        image_vectors = [img.flatten() for img in frames]
-        frame_matrix = np.array(image_vectors).T
         h, w = temporal_mean.shape[:2]
         weight = (h * w) ** -0.5
-        low_rank_matrix, noise = robust_pca(frame_matrix, alpha=weight)
-        low_rank_mean = low_rank_matrix.mean(axis=1).reshape(h, w)
-        means.append(low_rank_mean)
+        component_means = []
+        for i in range(3):
+            image_vectors = [img[:,:,i].flatten() for img in color_frames]
+            frame_matrix = np.array(image_vectors).T
+            low_rank_matrix, noise = robust_pca(frame_matrix, alpha=weight)
+            component_means.append(low_rank_matrix.mean(axis=1).reshape(h, w))
+        
+        means.append(np.stack(component_means,axis = -1))
 
     return means
 
@@ -320,6 +325,5 @@ def iterative_registration(image_arrays, max_iter=5):
 #   Testing	
 if __name__ == "__main__":
     frames = load_frames('expdata_middle.avi')
-    #imgs = iterative_registration(frames[0:99])
     imgs = oreifej_algorithm(frames[0:99])
     for i in range(len(imgs)): save_image(imgs[i], "result{}.jpg".format(i))
