@@ -77,7 +77,10 @@ def optical_flow(prev, next):
         the movement of each pixel between the images
     """
     # TODO: Use previous flow array as an initial guess
-    flow = cv2.calcOpticalFlowFarneback(prev, next, pyr_scale = 0.5, levels = 3, winsize = 15, iterations = 3, poly_n = 5, poly_sigma = 1.2, flags = cv2.OPTFLOW_USE_INITIAL_FLOW, ) #  , cv2.cv.OPTFLOW_USE_INITIAL_FLOW
+    flow = cv2.calcOpticalFlowFarneback(prev, next, pyr_scale = 0.5, levels = 3,
+                                        winsize = 15, iterations = 3, poly_n = 5,
+                                        poly_sigma = 1.2, flags = cv2.OPTFLOW_USE_INITIAL_FLOW, )
+    #  , cv2.cv.OPTFLOW_USE_INITIAL_FLOW
     return flow
 
 
@@ -98,11 +101,11 @@ def hta_algorithm(image_arrays, max_iter=5):
     means = []
     means.append(temporal_mean)
 
-    for i in range(max_iter):
+    for iter in range(max_iter):
         shift_maps = []
-        shift_maps.append(np.zeros((h,w,2)))
+        shift_maps.append(np.zeros((h, w, 2)))
         for i in range(len(frames)-1):
-            shift_maps.append(optical_flow(frames[0],frames[i+1]))
+            shift_maps.append(optical_flow(frames[0], frames[i+1]))
 
         centroid_shift_map = sum(shift_maps) / len(shift_maps)
 
@@ -136,24 +139,24 @@ def oreifej_algorithm(image_arrays, max_iter=10, low_rank=True):
     """
     # TODO: Blur the frames for a better result
     convergence_threshold = 0.01
-    frames = [image.mean(axis=2) for image in image_arrays]
+    greyscale_frames = [image.mean(axis=2) for image in image_arrays]
     color_frames = image_arrays
-    num_frames = len(frames)
-    temporal_mean = sum(frames) / num_frames
+    num_frames = len(greyscale_frames)
+    temporal_mean = sum(greyscale_frames) / num_frames
 
     means = []
-    means.append(np.mean(np.stack(color_frames,axis = 0),axis = 0))
+    means.append(np.mean(np.stack(color_frames, axis=0), axis=0))
 
     for iter in range(max_iter):
-        shift_maps = [optical_flow(frames[i], temporal_mean) for i in range(len(frames))]
-        dewarped_frames = [warp_flow(frames[i], shift_maps[i]) for i in range(len(frames))]
-        color_frames = [warp_flow(color_frames[i], shift_maps[i]) for i in range(len(color_frames))]
+        shift_maps = [optical_flow(greyscale_frames[i], temporal_mean) for i in range(num_frames)]
+        dewarped_frames = [warp_flow(greyscale_frames[i], shift_maps[i]) for i in range(num_frames)]
+        color_frames = [warp_flow(color_frames[i], shift_maps[i]) for i in range(num_frames)]
 
         new_mean = sum(dewarped_frames) / num_frames
         diffs = mean_of_differences(temporal_mean, new_mean)
         temporal_mean = new_mean
-        means.append(np.mean(np.stack(color_frames,axis = 0),axis = 0))
-        frames = dewarped_frames
+        means.append(np.mean(np.stack(color_frames, axis=0), axis=0))
+        greyscale_frames = dewarped_frames
         
         if diffs[0] < convergence_threshold:
             break
@@ -168,7 +171,7 @@ def oreifej_algorithm(image_arrays, max_iter=10, low_rank=True):
             low_rank_matrix, noise = robust_pca(frame_matrix, alpha=weight)
             component_means.append(low_rank_matrix.mean(axis=1).reshape(h, w))
         
-        means.append(np.stack(component_means,axis = -1))
+        means.append(np.stack(component_means, axis=-1))
 
     return means
 
