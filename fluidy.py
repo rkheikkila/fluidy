@@ -10,6 +10,8 @@ from numpy.linalg import norm, svd
 import cv2
 import numpy as np
 
+import os
+
 
 def load_frames(filename):
     """Loads a video file and converts the frames to a numpy array.
@@ -77,14 +79,14 @@ def optical_flow(prev, next):
         the movement of each pixel between the images
     """
     # TODO: Use previous flow array as an initial guess
-    flow = cv2.calcOpticalFlowFarneback(prev, next, pyr_scale = 0.5, levels = 3,
-                                        winsize = 15, iterations = 3, poly_n = 5,
-                                        poly_sigma = 1.2, flags = cv2.OPTFLOW_USE_INITIAL_FLOW, )
+    flow = cv2.calcOpticalFlowFarneback(prev, next, pyr_scale=0.5, levels=3,
+                                        winsize=15, iterations=3, poly_n=5,
+                                        poly_sigma=1.2, flags=cv2.OPTFLOW_USE_INITIAL_FLOW, )
     #  , cv2.cv.OPTFLOW_USE_INITIAL_FLOW
     return flow
 
 
-def hta_algorithm(image_arrays, max_iter=5):
+def hta_algorithm(image_arrays, max_iter=10):
     """Performs iterative registration for a set of frames.
 
     Args:
@@ -137,7 +139,6 @@ def oreifej_algorithm(image_arrays, max_iter=10, low_rank=True):
     Returns:
         a list of numpy arrays containing the mean of each iteration
     """
-    # TODO: Blur the frames for a better result
     convergence_threshold = 0.01
     greyscale_frames = [image.mean(axis=2) for image in image_arrays]
     color_frames = image_arrays
@@ -224,8 +225,57 @@ def robust_pca(X, alpha=0.01, tol=1e-4, max_iter=50, verbose=False):
     return A, E
 
 
-#   Testing	
+def fluidy(source, filename, max_iter, hta, save_each_stage):
+    """Helper function for accessing image processing algorithm from the command line.
+
+    Args:
+        source: name of the video file
+        filename: name of target file. Note that multiple files are created!
+        max_iter: iteration limit
+        hta: flag for enabling the HTA algorithm. If false, Oreifej algorithm is used.
+        save_each_stage: flag to write the result of each iteration to disk.
+
+    Returns:
+        Nothing, writes output to disk.
+    """
+    frames = load_frames(source)
+
+    if hta:
+        imgs = hta_algorithm(frames, max_iter)
+    else:
+        imgs = oreifej_algorithm(frames, max_iter)
+
+    if save_each_stage:
+        name, ext = os.path.splitext(filename)
+        for i in range(len(imgs)):
+            save_image(imgs[i], name + str(i) + ext)
+    else:
+        save_image(imgs[-1], filename)
+
+
+
+usage = """
+Usage: fluidy.py [args] <source_file> <result_file>
+
+Supported arguments:
+--hta: Flag for enabling the HTA algorithm.
+-i --iter: Maximum number of iterations.
+-p --progress: Print progress from each iteration
+"""
+
 if __name__ == "__main__":
-    frames = load_frames('expdata_middle.avi')
-    imgs = oreifej_algorithm(frames[0:99])
-    for i in range(len(imgs)): save_image(imgs[i], "result5{}.jpg".format(i))
+    import argparse
+    import sys
+
+    if len(sys.argv) < 2 or ("-h", "--help") in sys.argv:
+        sys.exit(usage)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("src")
+    parser.add_argument("dst")
+    parser.add_argument("-i", "--iter", type=int, dest="max_iter", default=10)
+    parser.add_argument("-p", "--progress", action="store_true", dest="progress")
+    parser.add_argument("--hta", action="store_true", dest="hta")
+    args = parser.parse_args()
+
+    fluidy(args.src, args.dst, args.max_iter, args.hta, args.progress)
