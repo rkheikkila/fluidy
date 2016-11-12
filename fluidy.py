@@ -20,6 +20,7 @@ def load_frames(filename):
         a list of 3D numpy arrays containing the video frames.
     """
     vidcap = cv2.VideoCapture(filename)
+    vidcap.set(cv2.cv.CV_CAP_PROP_FORMAT, cv2.CV_8U)
     return [vidcap.read()[1] for i in range(int(vidcap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT)))]	
 
 
@@ -129,9 +130,8 @@ def hta_algorithm(image_arrays, max_iter=10):
     return means
 
 
-def oreifej_algorithm(image_arrays, max_iter=10, low_rank=True):
+def oreifej_algorithm(image_arrays, max_iter=10, low_rank=False):
     """Performs iterative registration for a set of frames.
-
     Args:
         image_arrays: a list of 3D numpy arrays containing the video frames
         max_iter: Iteration limit
@@ -149,16 +149,19 @@ def oreifej_algorithm(image_arrays, max_iter=10, low_rank=True):
     means.append(np.mean(np.stack(color_frames, axis=0), axis=0))
 
     for iter in range(max_iter):
-        shift_maps = [optical_flow(greyscale_frames[i], temporal_mean) for i in range(num_frames)]
-        dewarped_frames = [warp_flow(greyscale_frames[i], shift_maps[i]) for i in range(num_frames)]
-        color_frames = [warp_flow(color_frames[i], shift_maps[i]) for i in range(num_frames)]
+        # Calculate shift maps on-demand to conserve memory
+        shift_maps = (optical_flow(frame, temporal_mean) for frame in greyscale_frames)
 
-        new_mean = sum(dewarped_frames) / num_frames
+        for i in range(num_frames):
+            pixel_shifts = shift_maps.next()
+            greyscale_frames[i] = warp_flow(greyscale_frames[i], pixel_shifts)
+            color_frames[i] = warp_flow(color_frames[i], pixel_shifts)
+
+        new_mean = sum(greyscale_frames) / num_frames
         diffs = mean_of_differences(temporal_mean, new_mean)
         temporal_mean = new_mean
         means.append(np.mean(np.stack(color_frames, axis=0), axis=0))
-        greyscale_frames = dewarped_frames
-        
+
         if diffs[0] < convergence_threshold:
             break
 
@@ -171,7 +174,7 @@ def oreifej_algorithm(image_arrays, max_iter=10, low_rank=True):
             frame_matrix = np.array(image_vectors).T
             low_rank_matrix, noise = robust_pca(frame_matrix, alpha=weight)
             component_means.append(low_rank_matrix.mean(axis=1).reshape(h, w))
-        
+
         means.append(np.stack(component_means, axis=-1))
 
     return means
@@ -198,8 +201,8 @@ def robust_pca(X, alpha=0.01, tol=1e-4, max_iter=50, verbose=False):
     norm_inf = norm(Y.ravel(), np.inf) / alpha
     dual_norm = np.max([norm_two, norm_inf])
     Y = Y / dual_norm
-    A = np.zeros(Y.shape)
-    E = np.zeros(Y.shape)
+    A = np.zeros(Y.shape, dtype=np.float32)
+    E = np.zeros(Y.shape, dtype=np.float32)
     dnorm = norm(X, 'fro')
     mu = 1.25 / norm_two
     rho = 1.5
