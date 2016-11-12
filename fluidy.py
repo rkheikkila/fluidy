@@ -228,7 +228,7 @@ def robust_pca(X, alpha=0.01, tol=1e-4, max_iter=50, verbose=False):
     return A, E
 
 
-def fluidy(source, filename, max_iter, hta, save_each_stage):
+def fluidy(source, filename, max_iter, hta, lowrank, save_each_stage):
     """Helper function for accessing image processing algorithm from the command line.
 
     Args:
@@ -246,7 +246,7 @@ def fluidy(source, filename, max_iter, hta, save_each_stage):
     if hta:
         imgs = hta_algorithm(frames, max_iter)
     else:
-        imgs = oreifej_algorithm(frames, max_iter)
+        imgs = oreifej_algorithm(frames, max_iter, lowrank)
 
     if save_each_stage:
         name, ext = os.path.splitext(filename)
@@ -263,6 +263,7 @@ Usage: fluidy.py [args] <source_file> <result_file>
 Supported arguments:
 --hta: Flag for enabling the HTA algorithm.
 -i --iter: Maximum number of iterations.
+-l --lowrank: Enable rank minimization in Oreifej algorithm.
 -p --progress: Print progress from each iteration
 """
 
@@ -277,8 +278,9 @@ if __name__ == "__main__":
     parser.add_argument("src")
     parser.add_argument("dst")
     parser.add_argument("-i", "--iter", type=int, dest="max_iter", default=10)
+    parser.add_argument("-l", "--lowrank", action="store_true", dest="lowrank")
     parser.add_argument("-p", "--progress", action="store_true", dest="progress")
     parser.add_argument("--hta", action="store_true", dest="hta")
     args = parser.parse_args()
 
-    fluidy(args.src, args.dst, args.max_iter, args.hta, args.progress)
+    fluidy(args.src, args.dst, args.max_iter, args.hta, args.lowrank, args.progress)
