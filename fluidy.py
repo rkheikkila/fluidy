@@ -24,6 +24,22 @@ def load_frames(filename):
     return [vidcap.read()[1] for i in range(int(vidcap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT)))]	
 
 
+def save_video(frames, filename):
+    """ Saves a video to disk
+
+    Args:
+        frames: a list of 3D numpy arrays
+        filename: name of video file
+
+    Returns:
+        nothing, saves video to disk
+    """
+    h, w = frames[0].shape[:2]
+    vidwrite = cv2.VideoWriter(filename, cv2.cv.CV_FOURCC('D','I','V','X'), fps = 30.0, frameSize = (w, h))
+    for frame in frames:
+        vidwrite.write(frame)
+
+
 def save_image(array, filename):
     """ Saves a image array to disk
 
@@ -97,35 +113,45 @@ def hta_algorithm(image_arrays, max_iter=10):
         a list of numpy arrays containing the mean of each iteration
     """
     # This method doesn't work yet
-    frames = [image.mean(axis=2) for image in image_arrays]
-    temporal_mean = sum(frames) / len(frames)
+    convergence_threshold = 0.01
+    greyscale_frames = [image.mean(axis=2) for image in image_arrays]
+    color_frames = image_arrays
+    num_frames = len(greyscale_frames)
+    temporal_mean = sum(greyscale_frames) / num_frames
     h, w = temporal_mean.shape[:2]
 
     means = []
-    means.append(temporal_mean)
+    means.append(np.mean(np.stack(color_frames, axis=0), axis=0))
 
     for iter in range(max_iter):
         shift_maps = []
         shift_maps.append(np.zeros((h, w, 2)))
-        for i in range(len(frames)-1):
-            shift_maps.append(optical_flow(frames[0], frames[i+1]))
+        for i in range(num_frames-1):
+            shift_maps.append(optical_flow(greyscale_frames[0], greyscale_frames[i+1]))
+            #shift_maps.append(optical_flow(greyscale_frames[i+1], greyscale_frames[0]))
 
-        centroid_shift_map = sum(shift_maps) / len(shift_maps)
+        centroid_shift_map = np.mean(np.stack(shift_maps, axis=0), axis=0)
 
         corrected_shift_maps = []
-        for n in range(len(shift_maps)):
+        for shift_map in shift_maps:
             map = centroid_shift_map
             for i in range(w):
                 for j in range(h):
                     indx = max(min(i + int(round(w*map[j,i,0])),w-1),0)
-                    indy = max(min(i + int(round(h*map[j,i,1])),h-1),0)
-                    map[j,i,:] = map[j,i,:] + shift_maps[n][indy,indx,:]
+                    indy = max(min(j + int(round(h*map[j,i,1])),h-1),0)
+                    map[j,i] += shift_map[indy,indx]
             corrected_shift_maps.append(map)
 
-        dewarped_frames = [warp_flow(frames[i],shift_maps[i]) for i in range(len(frames))]
-        temporal_mean = sum(dewarped_frames) / len(dewarped_frames)
-        means.append(temporal_mean)
-        frames = dewarped_frames
+        dewarped_frames = [warp_flow(greyscale_frames[i],corrected_shift_maps[i]) for i in range(num_frames)]
+        color_frames = [warp_flow(color_frames[i],corrected_shift_maps[i]) for i in range(num_frames)]
+        new_mean = sum(dewarped_frames) / num_frames
+        diffs = mean_of_differences(temporal_mean, new_mean)
+        temporal_mean = new_mean
+        means.append(np.mean(np.stack(color_frames, axis=0), axis=0))
+        greyscale_frames = dewarped_frames
+
+        if diffs[0] < convergence_threshold:
+            break
 
     return means
 
