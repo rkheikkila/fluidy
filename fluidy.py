@@ -103,7 +103,7 @@ def optical_flow(prev, next):
     return flow
 
 
-def hta_algorithm(image_arrays, max_iter=10):
+def hta_algorithm(image_arrays, max_iter=10, video=False):
     """Performs iterative registration for a set of frames.
 
     Args:
@@ -156,7 +156,7 @@ def hta_algorithm(image_arrays, max_iter=10):
     return means
 
 
-def oreifej_algorithm(image_arrays, max_iter=10, low_rank=False):
+def oreifej_algorithm(image_arrays, max_iter=10, low_rank=False, video=False):
     """Performs iterative registration for a set of frames.
     Args:
         image_arrays: a list of 3D numpy arrays containing the video frames
@@ -188,8 +188,11 @@ def oreifej_algorithm(image_arrays, max_iter=10, low_rank=False):
         temporal_mean = new_mean
         means.append(np.mean(np.stack(color_frames, axis=0), axis=0))
 
-        if diffs[0] < convergence_threshold:
+        if sum(diffs) < convergence_threshold:
             break
+            
+    if video:
+        return color_frames
 
     if low_rank:
         h, w = temporal_mean.shape[:2]
@@ -254,7 +257,7 @@ def robust_pca(X, alpha=0.01, tol=1e-4, max_iter=50, verbose=False):
     return A, E
 
 
-def fluidy(source, filename, max_iter, hta, lowrank, save_each_stage):
+def fluidy(source, filename, max_iter, hta, lowrank, save_each_stage, video):
     """Helper function for accessing image processing algorithm from the command line.
 
     Args:
@@ -268,18 +271,25 @@ def fluidy(source, filename, max_iter, hta, lowrank, save_each_stage):
         Nothing, writes output to disk.
     """
     frames = load_frames(source)
+    
+    if not frames:
+        print("No file '{}' found!".format(source))
+        return
 
     if hta:
-        imgs = hta_algorithm(frames, max_iter)
+        imgs = hta_algorithm(frames, max_iter, video)
     else:
-        imgs = oreifej_algorithm(frames, max_iter, lowrank)
+        imgs = oreifej_algorithm(frames, max_iter, lowrank, video)
 
-    if save_each_stage:
-        name, ext = os.path.splitext(filename)
-        for i in range(len(imgs)):
-            save_image(imgs[i], name + str(i) + ext)
+    if video:
+        save_video(imgs, filename)
     else:
-        save_image(imgs[-1], filename)
+        if save_each_stage:
+            name, ext = os.path.splitext(filename)
+            for i in range(len(imgs)):
+                save_image(imgs[i], name + str(i) + ext)
+        else:
+            save_image(imgs[-1], filename)
 
 
 
@@ -291,6 +301,7 @@ Supported arguments:
 -i --iter: Maximum number of iterations.
 -l --lowrank: Enable rank minimization in Oreifej algorithm.
 -p --progress: Print progress from each iteration
+-v --video: Output video instead of still image
 """
 
 if __name__ == "__main__":
@@ -306,7 +317,9 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--iter", type=int, dest="max_iter", default=10)
     parser.add_argument("-l", "--lowrank", action="store_true", dest="lowrank")
     parser.add_argument("-p", "--progress", action="store_true", dest="progress")
+    parser.add_argument("-v", "--video", action="store_true", dest="video")
     parser.add_argument("--hta", action="store_true", dest="hta")
     args = parser.parse_args()
 
-    fluidy(args.src, args.dst, args.max_iter, args.hta, args.lowrank, args.progress)
+    fluidy(args.src, args.dst, args.max_iter, args.hta, 
+           args.lowrank, args.progress, args.video)
