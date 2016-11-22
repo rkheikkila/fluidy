@@ -1,9 +1,10 @@
 # fluidy
 Image processing for seeing through water.
 
-A simple example is given below (sample video frame on the left, our result on the right):
+Two simple examples are given below (sample video frame on the left, our result on the right):
 
 ![Sample frame](examples/brick_sample.png?raw=true) ![Result](examples/brick.jpg?raw=true)
+![Sample frame](examples/checkboard_sample.png?raw=true) ![Result](examples/checkboard.jpg?raw=true)
 
 Example data from [Carnegie Mellon University](http://www.cs.cmu.edu/~ILIM/projects/IM/water/research_water.html).
 
