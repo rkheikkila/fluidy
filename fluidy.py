@@ -112,7 +112,6 @@ def hta_algorithm(image_arrays, max_iter=10, video=False):
     Returns:
         a list of numpy arrays containing the mean of each iteration
     """
-    # This method doesn't work yet
     convergence_threshold = 0.01
     greyscale_frames = [image.mean(axis=2) for image in image_arrays]
     color_frames = image_arrays
@@ -127,20 +126,20 @@ def hta_algorithm(image_arrays, max_iter=10, video=False):
         shift_maps = []
         shift_maps.append(np.zeros((h, w, 2)))
         for i in range(num_frames-1):
-            shift_maps.append(optical_flow(greyscale_frames[0], greyscale_frames[i+1]))
-            #shift_maps.append(optical_flow(greyscale_frames[i+1], greyscale_frames[0]))
+            shift_maps.append(optical_flow(greyscale_frames[i+1], greyscale_frames[0]))
 
         centroid_shift_map = np.mean(np.stack(shift_maps, axis=0), axis=0)
 
         corrected_shift_maps = []
         for shift_map in shift_maps:
-            map = centroid_shift_map
+            corrected_map = np.zeros((h, w, 2))
             for i in range(w):
                 for j in range(h):
-                    indx = max(min(i + int(round(w*map[j,i,0])),w-1),0)
-                    indy = max(min(j + int(round(h*map[j,i,1])),h-1),0)
-                    map[j,i] += shift_map[indy,indx]
-            corrected_shift_maps.append(map)
+                    # Calculate indices and ensure they stay within array bounds
+                    indx = max(min(int(round(i + centroid_shift_map[j,i,0])), w-1), 0)
+                    indy = max(min(int(round(j + centroid_shift_map[j,i,1])), h-1), 0)
+                    corrected_map[j,i,:] = -centroid_shift_map[j,i,:] + shift_map[indy,indx,:]
+            corrected_shift_maps.append(corrected_map)
 
         dewarped_frames = [warp_flow(greyscale_frames[i],corrected_shift_maps[i]) for i in range(num_frames)]
         color_frames = [warp_flow(color_frames[i],corrected_shift_maps[i]) for i in range(num_frames)]
@@ -150,7 +149,7 @@ def hta_algorithm(image_arrays, max_iter=10, video=False):
         means.append(np.mean(np.stack(color_frames, axis=0), axis=0))
         greyscale_frames = dewarped_frames
 
-        if diffs[0] < convergence_threshold:
+        if sum(diffs) < convergence_threshold:
             break
 
     return means
@@ -162,6 +161,7 @@ def oreifej_algorithm(image_arrays, max_iter=10, low_rank=False, video=False):
         image_arrays: a list of 3D numpy arrays containing the video frames
         max_iter: Iteration limit
         low_rank: eliminate sparse noise by rank minimization
+        video: return video instead of mean image
     Returns:
         a list of numpy arrays containing the mean of each iteration
     """
