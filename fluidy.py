@@ -130,24 +130,26 @@ def hta_algorithm(image_arrays, max_iter=10, video=False):
 
         centroid_shift_map = np.mean(np.stack(shift_maps, axis=0), axis=0)
 
-        corrected_shift_maps = []
-        for shift_map in shift_maps:
+        for i in range(num_frames):
+            # Calculate indices and ensure they stay within array bounds
             indx, indy = np.meshgrid(range(w), range(h), sparse=False, indexing='xy')
-            indx = np.fmax(np.fmin(np.rint(indx+centroid_shift_map[:,:,0]),w-1),0)
-            indy = np.fmax(np.fmin(np.rint(indy+centroid_shift_map[:,:,1]),h-1),0)
-            corrected_map = -centroid_shift_map + shift_map[indy.astype(int),indx.astype(int),:]
-            corrected_shift_maps.append(corrected_map)
+            indx = np.fmax(np.fmin(np.rint(indx + centroid_shift_map[:,:,0]), w-1), 0)
+            indy = np.fmax(np.fmin(np.rint(indy + centroid_shift_map[:,:,1]), h-1), 0)
+            corrected_shift_map = -centroid_shift_map + shift_maps[i][indy.astype(int),indx.astype(int),:]
 
-        dewarped_frames = [warp_flow(greyscale_frames[i],corrected_shift_maps[i]) for i in range(num_frames)]
-        color_frames = [warp_flow(color_frames[i],corrected_shift_maps[i]) for i in range(num_frames)]
-        new_mean = sum(dewarped_frames) / num_frames
+            greyscale_frames[i] = warp_flow(greyscale_frames[i], corrected_shift_map)
+            color_frames[i] = warp_flow(color_frames[i], corrected_shift_map)
+
+        new_mean = sum(greyscale_frames) / num_frames
         diffs = mean_of_differences(temporal_mean, new_mean)
         temporal_mean = new_mean
         means.append(np.mean(np.stack(color_frames, axis=0), axis=0))
-        greyscale_frames = dewarped_frames
 
         if sum(diffs) < convergence_threshold:
             break
+
+    if video:
+        return color_frames
 
     return means
 
