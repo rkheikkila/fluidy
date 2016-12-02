@@ -132,13 +132,10 @@ def hta_algorithm(image_arrays, max_iter=10, video=False):
 
         corrected_shift_maps = []
         for shift_map in shift_maps:
-            corrected_map = np.zeros((h, w, 2))
-            for i in range(w):
-                for j in range(h):
-                    # Calculate indices and ensure they stay within array bounds
-                    indx = max(min(int(round(i + centroid_shift_map[j,i,0])), w-1), 0)
-                    indy = max(min(int(round(j + centroid_shift_map[j,i,1])), h-1), 0)
-                    corrected_map[j,i,:] = -centroid_shift_map[j,i,:] + shift_map[indy,indx,:]
+            indx, indy = np.meshgrid(range(w), range(h), sparse=False, indexing='xy')
+            indx = np.fmax(np.fmin(np.rint(indx+centroid_shift_map[:,:,0]),w-1),0)
+            indy = np.fmax(np.fmin(np.rint(indy+centroid_shift_map[:,:,1]),h-1),0)
+            corrected_map = -centroid_shift_map + shift_map[indy.astype(int),indx.astype(int),:]
             corrected_shift_maps.append(corrected_map)
 
         dewarped_frames = [warp_flow(greyscale_frames[i],corrected_shift_maps[i]) for i in range(num_frames)]
