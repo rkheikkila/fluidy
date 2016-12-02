@@ -275,20 +275,24 @@ def fluidy(source, filename, max_iter, hta, lowrank, save_each_stage, video):
         print("No file '{}' found!".format(source))
         return
 
-    if hta:
-        imgs = hta_algorithm(frames, max_iter, video)
-    else:
-        imgs = oreifej_algorithm(frames, max_iter, lowrank, video)
+    try:
+        if hta:
+            imgs = hta_algorithm(frames, max_iter, video)
+        else:
+            imgs = oreifej_algorithm(frames, max_iter, lowrank, video)
+    except MemoryError:
+        print("Ran out of memory :(")
+        return
 
-    if video:
-        save_video(imgs, filename)
-    else:
+    if not video:
         if save_each_stage:
             name, ext = os.path.splitext(filename)
             for i in range(len(imgs)):
                 save_image(imgs[i], name + str(i) + ext)
         else:
             save_image(imgs[-1], filename)
+    else:
+        save_video(imgs, filename)
 
 
 
