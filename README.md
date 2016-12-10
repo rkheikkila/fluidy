@@ -1,5 +1,5 @@
 # fluidy
-Image processing for seeing through water.
+Video processing for seeing through water. This project implements algorithms that reduce distortions in a video caused by a wavy water surface.
 
 Two simple examples are given below (sample video frame on the left, followed by results from two different algorithms):
 
@@ -9,7 +9,7 @@ Two simple examples are given below (sample video frame on the left, followed by
 
 Example data from [Carnegie Mellon University](http://www.cs.cmu.edu/~ILIM/projects/IM/water/research_water.html).
 
-These algorithms reduce distortions in a video caused by a wavy water surface. The algorithms are based on two different iterative non-rigid registration methods:
+The algorithms are based on two different iterative non-rigid registration methods:
 
 * [Oreifej et al. 2011: A Two-Stage Reconstruction Approach for Seeing Through Water](http://www.cs.ucf.edu/~oreifej/papers/WATER_CVPR2011.pdf)
 * [Halder et al. 2014: High accuracy image restoration method for seeing through water](http://proceedings.spiedigitallibrary.org/proceeding.aspx?articleid=1910348)
